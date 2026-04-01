@@ -1,0 +1,26 @@
+FROM php:8.4-cli
+
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    libpq-dev \
+    libzip-dev \
+    zip \
+    librabbitmq-dev \
+    libssl-dev \
+    && docker-php-ext-install pdo pdo_mysql pdo_pgsql zip opcache \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pecl install amqp \
+    && docker-php-ext-enable amqp
+
+WORKDIR /var/www/html
+
+EXPOSE 8006
+
+CMD php -S 0.0.0.0:8006 public/index.php

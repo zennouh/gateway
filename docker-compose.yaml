@@ -1,0 +1,29 @@
+# version: '3.8'
+
+services:
+  auth:
+    build:
+      context: .
+      dockerfile: docker/dockerfile
+    container_name: auth_container
+    restart: unless-stopped
+    ports:
+      - "8006:8006"
+    volumes:
+      - .:/var/www/html
+    env_file:
+      - .env
+    networks:
+      - app_network  
+      # - auth_network
+
+  
+
+volumes:
+  auth_db_data:
+
+networks:
+    app_network:
+      external: true           
+    # auth_network:
+    #   driver: bridge
