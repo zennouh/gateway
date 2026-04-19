@@ -40,6 +40,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $avatar = null;
 
+    #[ORM\Column(length: 255, nullable: true)]
+    private ?string $phone = null;
+
+    #[ORM\Column(nullable: true, options: ['default' => false])]
+    private ?bool $is_active = false;
+
     public function __construct(string $email = '', string $password = '', array $roles = ['ROLE_USER'], ?string $name = '')
     {
         $this->email = $email;
@@ -129,8 +135,27 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this->email;
     }
 
-    public function eraseCredentials(): void
+    public function getPhone(): ?string
     {
-        // If you store any temporary, sensitive data on the user, clear it here
+        return $this->phone;
+    }
+
+    public function setPhone(?string $phone): static
+    {
+        $this->phone = $phone;
+
+        return $this;
+    }
+
+    public function isActive(): ?bool
+    {
+        return $this->is_active;
+    }
+
+    public function setIsActive(bool $is_active): static
+    {
+        $this->is_active = $is_active;
+
+        return $this;
     }
 }
