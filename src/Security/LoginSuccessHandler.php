@@ -20,15 +20,8 @@ class LoginSuccessHandler implements AuthenticationSuccessHandlerInterface
     {
         $user = $token->getUser();
 
-        $user_data = [
-            'id' => $user->getId(),
-            'email' => $user->getEmail(),
-            'roles' => $user->getRoles(),
-        ];
-
         $response = new JsonResponse([
             "token" => $this->jwtService->generateToken($user),
-            "user" => $user_data,
             'message' => 'Login successful',
 
         ]);
