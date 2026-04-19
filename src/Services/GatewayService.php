@@ -13,6 +13,7 @@ class GatewayService
         ServicesEnum::FORUMS->value => 'http://forums:8000/api/forums/threads',
         ServicesEnum::CHILDCARE->value => 'http://childcare:8008/api/childcare',
         ServicesEnum::JOBS->value => 'http://jobs:8009/api/jobs',
+        ServicesEnum::ADMIN->value => 'http://admin:8011/api/admin',
     ];
 
     public function __construct(private HttpClientInterface $httpClient) {}
@@ -39,7 +40,7 @@ class GatewayService
         }
 
         // dd($method, $url, $headers, $body);
-        
+
         $response = $this->httpClient->request($method, $url, [
             'headers' => $headers,
             'body'    => $body,
