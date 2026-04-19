@@ -8,7 +8,10 @@ use App\Entity\Employer;
 use App\Entity\Mom;
 use App\Entity\User;
 use App\Services\AuthService;
+use App\Services\GatewayService;
+use App\Test\UploadService;
 use Doctrine\ORM\EntityManagerInterface;
+use Exception;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -35,98 +38,94 @@ class SignupController extends AbstractController
     ) {}
 
     #[Route('/register', name: 'register', methods: ['POST'])]
-    public function register(Request $request): JsonResponse
+    public function register(Request $request, UploadService $uploadService): JsonResponse
     {
-        $data = $request->request->all();
-
-        if ($data === []) {
-            $data = json_decode($request->getContent(), true);
-        }
-
-        if (!is_array($data)) {
-            return $this->json(
-                ['error' => 'Invalid JSON payload'],
-                Response::HTTP_BAD_REQUEST
-            );
-        }
-
-        if (empty($data['email']) || empty($data['password']) || empty($data['userType'])) {
-            return $this->json(
-                ['error' => 'Missing email, password, or userType'],
-                Response::HTTP_BAD_REQUEST
-            );
-        }
-
-        $userType = strtolower((string) $data['userType']);
-
         try {
-            $user = $this->buildUserByType($userType, $data);
-        } catch (\InvalidArgumentException $exception) {
-            return $this->json(
-                ['error' => $exception->getMessage()],
-                Response::HTTP_BAD_REQUEST
-            );
-        }
 
-        $user->setEmail((string) $data['email']);
-        $user->setRoles($this->resolveRolesForType($userType));
 
-        $hashedPassword = $this->authService->hashPassword($user, (string) $data['password']);
-        $user->setPassword($hashedPassword);
-        $user->setName((string) ($data['name'] ?? ''));
+            $data = $request->request->all();
 
-        $avatarFile = $request->files->get('avatar');
-        if ($avatarFile instanceof UploadedFile) {
+            if ($data === []) {
+                $data = json_decode($request->getContent(), true);
+            }
+
+            if (!is_array($data)) {
+                return $this->json(
+                    ['error' => 'Invalid JSON payload'],
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            if (empty($data['email']) || empty($data['password']) || empty($data['userType'])) {
+                return $this->json(
+                    ['error' => 'Missing email, password, or userType'],
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            $userType = strtolower((string) $data['userType']);
+
             try {
-                $user->setAvatar($this->uploadAvatar($avatarFile));
-            } catch (\RuntimeException $exception) {
+                $user = $this->buildUserByType($userType, $data);
+            } catch (\InvalidArgumentException $exception) {
                 return $this->json(
                     ['error' => $exception->getMessage()],
                     Response::HTTP_BAD_REQUEST
                 );
             }
+
+            $user->setEmail((string) $data['email']);
+            $user->setRoles($this->resolveRolesForType($userType));
+
+            $hashedPassword = $this->authService->hashPassword($user, (string) $data['password']);
+            $user->setPassword($hashedPassword);
+            $user->setName((string) ($data['name'] ?? ''));
+
+            $file = $request->files->get('avatar');
+
+            if (!$file) {
+                throw new Exception("Avatar file is missing in the request");
+            }
+
+            // dd($file);
+
+            if ($file && !$file->isValid()) {
+                return $this->json(
+                    ['error' => 'Invalid avatar file upload'],
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            try {
+                $filename =  $uploadService->uploadImage($file);
+            } catch (Exception $e) {
+                $filename = null;
+            }
+
+            $user->setAvatar($filename ?? "/uploads/avatars/profile.png");
+
+            $this->entityManager->persist($user);
+            $this->entityManager->flush();
+
+
+
+            return $this->json([
+                'message' => 'User registered successfully',
+                'userType' => $userType,
+                'roles' => $user->getRoles(),
+                'avatar' => $user->getAvatar(),
+                // 'token' => $token,
+            ], Response::HTTP_CREATED);
+        } catch (Exception $e) {
+            // dd($e->getMessage(), $e->getTraceAsString());
+            return $this->json(
+                ['error' => 'Failed: ' . $e->getMessage(), 'trace' => $e->getTraceAsString()],
+                Response::HTTP_INTERNAL_SERVER_ERROR
+            );
         }
-
-        $this->entityManager->persist($user);
-        $this->entityManager->flush();
-
-        // $token = $this->authService->createToken($user);
-
-        return $this->json([
-            'message' => 'User registered successfully',
-            'userType' => $userType,
-            'roles' => $user->getRoles(),
-            'avatar' => $user->getAvatar(),
-            // 'token' => $token,
-        ], Response::HTTP_CREATED);
     }
 
-    private function uploadAvatar(UploadedFile $file): string
-    {
-        $maxSize = 2 * 1024 * 1024;
-        $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
-        if (($file->getSize() ?? 0) > $maxSize) {
-            throw new \RuntimeException('Avatar file is too large. Max size is 2MB.');
-        }
-
-        if (!in_array((string) $file->getMimeType(), $allowedMimeTypes, true)) {
-            throw new \RuntimeException('Invalid avatar format. Allowed: jpg, png, webp.');
-        }
-
-        if (!is_dir($this->uploadsAvatarDir) && !mkdir($this->uploadsAvatarDir, 0775, true) && !is_dir($this->uploadsAvatarDir)) {
-            throw new \RuntimeException('Cannot create avatar upload directory.');
-        }
-
-        $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-        $safeName = $this->slugger->slug($originalName)->lower()->toString();
-        $extension = $file->guessExtension() ?: 'bin';
-        $filename = $safeName . '-' . bin2hex(random_bytes(6)) . '.' . $extension;
-
-        $file->move($this->uploadsAvatarDir, $filename);
-
-        return $filename;
-    }
 
     private function resolveRolesForType(string $userType): array
     {
@@ -191,12 +190,13 @@ class SignupController extends AbstractController
 
     private function buildAdmin(array $data): Admin
     {
-        if (!isset($data['department'])) {
-            throw new \InvalidArgumentException('Admin requires: department');
-        }
+        // if (!isset($data['department'])) {
+        //     throw new \InvalidArgumentException('Admin requires: department');
+        // }
 
         $admin = new Admin();
-        $admin->setDepartment((string) $data['department']);
+        $admin->setIsActive(true);
+        // $admin->setDepartment((string) $data['department']);
 
         return $admin;
     }
