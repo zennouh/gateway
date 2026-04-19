@@ -24,6 +24,9 @@ class JwtService
         $payload = array_merge([
             'sub' => $user->getId(),
             'email' => $user->getEmail(),
+            'name' => $user->getName(),
+            'avatar' => $user->getAvatar(),
+            'isActive' => $user->isActive() ?? false,
             'roles' => $user->getRoles(),
             'iat' => $now,
             'exp' => $now + $ttl,
